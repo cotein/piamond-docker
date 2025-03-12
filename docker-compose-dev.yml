@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+
+  mysql_db:
+    image: mysql:8.0
+    user: root
+    container_name: mysql_db
+    restart: always
+    environment:
+      - MYSQL_DATABASE=misistema
+      - MYSQL_PASSWORD=311034
+      - MYSQL_ROOT_PASSWORD=311034
+      - MYSQL_HOST=mysql_db
+      - APP_ENV=local
+      - APP_KEY=base64:tu_clave_aqui
+      - APP_DEBUG=true
+      - APP_URL=http://localhost
+    ports:
+      - 3131:3306
+    volumes:
+      - ./mysql_data:/var/lib/mysql
+    networks:
+      - piamond_network
+
+  piamond_web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: piamond_web
+    ports:
+      - "81:80"
+      - "443:443"
+      - "10001:10000"
+      - "22:22"
+
+    volumes:
+      - ./src:/var/www/dmit.sytes.net
+      - ./virtualhostsapache2:/etc/apache2/sites-available
+      - ./ssh:/home/dima/.ssh
+    environment:
+      - DEBIAN_FRONTEND=noninteractive
+    depends_on:
+      - mysql_db
+    networks:
+      - piamond_network
+
+volumes:
+  mysql_data:
+
+
+networks:
+  piamond_network:
+    driver: bridge

@@ -1,0 +1,4 @@
+mysql_data/
+src/database/sql/
+src/database/sql/*
+src/database/sql/**/*   

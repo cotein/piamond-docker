@@ -1,0 +1,159 @@
+FROM php:7.4-apache AS php
+
+RUN apt-get update -y 
+
+
+# Evitar preguntas interactivas durante la instalación
+ENV DEBIAN_FRONTEND=noninteractive
+
+## Actualiza los paquetes y agrega la clave GPG
+RUN apt-get update && apt-get install -y --no-install-recommends gnupg \
+    && apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 0E98404D386FA1D9 6ED0E7B82643E131 \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+
+# Configurar la zona horaria de Buenos Aires de manera no interactiva
+RUN ln -fs /usr/share/zoneinfo/America/Argentina/Buenos_Aires /etc/localtime
+RUN apt-get update && apt-get install -y tzdata
+RUN dpkg-reconfigure --frontend noninteractive tzdata
+
+#RUN echo "deb http://deb.debian.org/debian/ testing main" >> /etc/apt/sources.list
+
+# Actualiza el sistema e instala wget y otras dependencias necesarias
+RUN apt-get install -y software-properties-common wget gnupg2 curl
+
+# Agregar el repositorio de PHP de Ondřej Surý manualmente
+#RUN apt-get install -y apt-transport-https lsb-release ca-certificates
+#RUN curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+#RUN sh -c 'echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/php.list'
+#RUN  add-apt-repository ppa:ondrej/php
+
+RUN apt-get update
+
+# Instala las dependencias necesarias
+RUN apt-get install -y \
+    libjpeg-dev \
+    libzip-dev \
+    unzip \
+    net-tools \
+    mc \
+    nano \
+    certbot \
+    python3-certbot-apache \
+    libapache2-mod-fcgid \
+    perl libnet-ssleay-perl libio-socket-ssl-perl \
+    libauthen-pam-perl ssh && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+#RUN apt-get install -y \
+#    php8.2-cli \
+#    php8.2-common \
+#    php8.2-mysql \
+#    php8.2-xml \
+#    php8.2-fpm
+
+# Agregar el repositorio de Webmin
+RUN echo "deb https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
+RUN wget -qO - http://www.webmin.com/jcameron-key.asc | apt-key add -
+
+# Instalar Webmin
+RUN apt-get update && apt-get install -y webmin
+
+RUN apt-get update && apt-get install -y \
+    libzip-dev \
+    libxml2-dev \
+    libonig-dev \
+    libicu-dev \
+    unzip \
+    git \
+    && docker-php-ext-install zip \
+    && docker-php-ext-install soap \
+    && docker-php-ext-install mbstring \
+    && docker-php-ext-install intl \
+    && docker-php-ext-install pdo_mysql \
+    && docker-php-ext-install opcache
+
+# Establece el ServerName global para evitar advertencias  
+#RUN echo "ServerName dmit.sytes.net" >> /etc/apache2/apache2.conf
+
+
+# Crea el nuevo directorio para el virtual host  
+RUN mkdir -p /var/www/dmit.sytes.net
+
+# Habilitar mod_rewrite de Apache
+
+
+WORKDIR /var/www/dmit.sytes.net
+
+# Copia los archivos de tu aplicación al nuevo directorio  
+COPY ./src /var/www/dmit.sytes.net/
+
+# Crea el archivo de configuración del virtual host  
+#RUN echo "<VirtualHost *:80>\n\
+#    ServerName dmit.sytes.net\n\
+#    ServerAlias www.dmit.sytes.net\n\
+#    DocumentRoot /var/www/dmit.sytes.net\n\
+#    <Directory /var/www/dmit.sytes.net>\n\
+#    Options Indexes FollowSymLinks\n\
+#    AllowOverride All\n\
+#    Require all granted\n\
+#    </Directory>\n\
+#    </VirtualHost>" > /etc/apache2/sites-available/000-default.conf
+
+
+COPY ./virtual-hosts-apache/dmit.sytes.conf /etc/apache2/sites-available/
+
+# Configurar Apache para usar PHP-FPM
+#RUN echo "<FilesMatch \.php$>\n\
+#    SetHandler 'proxy:fcgi://127.0.0.1:9000'\n\
+#    </FilesMatch>" > /etc/apache2/conf-available/php-fpm.conf
+#
+#RUN a2enconf php-fpm
+
+# Instala Composer  
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+# Configura el acceso SSH  
+RUN mkdir /var/run/sshd && \
+    useradd -m dima && \
+    echo 'dima:sanmartin1333' | chpasswd && \
+    mkdir -p /home/dima/.ssh && \
+    chmod 700 /home/dima/.ssh && \
+    chown dima:dima /home/dima/.ssh
+
+
+# Establecer contraseña de root  
+RUN echo 'root:Sanmartin1333' | chpasswd # Establecer contraseña para root
+RUN sed -i '/PermitRootLogin/c\PermitRootLogin yes' /etc/ssh/sshd_config
+
+# Cambiar el directorio raíz  
+#RUN sed -i 's|/var/www/html|/var/www|g' /etc/apache2/sites-available/000-default.conf
+
+# Configurar el DocumentRoot para tus virtual hosts si es necesario  
+#RUN echo '<Directory /var/www/>' >> /etc/apache2/sites-available/000-default.conf
+#RUN echo '    Options Indexes FollowSymLinks' >> /etc/apache2/sites-available/000-default.conf
+#RUN echo '    AllowOverride All' >> /etc/apache2/sites-available/000-default.conf
+#RUN echo '    Require all granted' >> /etc/apache2/sites-available/000-default.conf
+#RUN echo '</Directory>' >> /etc/apache2/sites-available/000-default.conf
+
+# Habilita SSL y el módulo de reescritura  
+# RUN a2enmod ssl && a2enmod rewrite  
+RUN a2enmod rewrite
+
+# Configuración de Apache para SSL (usando un archivo ficticio inicial)  
+#COPY ./virtual-hosts-apache/ /etc/apache2/sites-available/
+
+RUN a2ensite dmit.sytes.conf
+#RUN a2ensite piamonddmit.sytes.net.conf
+RUN a2enmod rewrite
+
+# Habilitar el sitio
+
+RUN chown -R www-data:www-data /var/www/dmit.sytes.net/public
+RUN chmod -R 755 /var/www/dmit.sytes.net/public
+# Establecer permisos
+RUN chown -R www-data:www-data /var/www/dmit.sytes.net/storage /var/www/dmit.sytes.net/bootstrap/cache
+RUN chmod -R 775 /var/www/dmit.sytes.net/storage /var/www/dmit.sytes.net/bootstrap/cache
+
+# Comando para iniciar Apache
+CMD service webmin start && apache2-foreground
