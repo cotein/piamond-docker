@@ -3,7 +3,7 @@ version: '3.8'
 services:
 
   mysql_db:
-    image: mysql:8.0
+    image: mysql:5.7
     user: root
     container_name: mysql_db
     restart: always
@@ -36,7 +36,7 @@ services:
 
     volumes:
       - ./src:/var/www/dmit.sytes.net
-      - ./virtualhostsapache2:/etc/apache2/sites-available
+      - ./virtual-hosts-apache:/etc/apache2/sites-available
       - ./ssh:/home/dima/.ssh
     environment:
       - DEBIAN_FRONTEND=noninteractive
