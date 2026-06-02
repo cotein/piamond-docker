@@ -1,7 +1,7 @@
-FROM php:7.2-apache
+FROM php:7.4-apache-buster
+#FROM php:7.2-apache
 
 RUN apt-get update -y 
-
 
 # Evitar preguntas interactivas durante la instalación
 ENV DEBIAN_FRONTEND=noninteractive
@@ -26,9 +26,9 @@ RUN apt-get install -y software-properties-common wget gnupg2 curl
 RUN curl -fsSL https://deb.nodesource.com/setup_16.x | bash - && \
     apt-get install -y nodejs
 
-
 RUN apt-get update
 
+#RUN apt-get install -y  apache2
 # Instala las dependencias necesarias
 RUN apt-get install -y \
     libjpeg-dev \
@@ -46,11 +46,11 @@ RUN apt-get install -y \
 
 
 # Agregar el repositorio de Webmin
-RUN echo "deb https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
-RUN wget -qO - http://www.webmin.com/jcameron-key.asc | apt-key add -
-
-# Instalar Webmin
-RUN apt-get update && apt-get install -y webmin
+#RUN echo "deb https://download.webmin.com/download/repository sarge contrib" > /etc/apt/sources.list.d/webmin.list
+#RUN wget -qO - http://www.webmin.com/jcameron-key.asc | apt-key add -
+#
+## Instalar Webmin
+#RUN apt-get update && apt-get install -y webmin
 
 # Establece el ServerName global para evitar advertencias  
 #RUN echo "ServerName dmit.sytes.net" >> /etc/apache2/apache2.conf
@@ -72,35 +72,40 @@ RUN docker-php-ext-install intl
 RUN docker-php-ext-install pdo_mysql
 RUN docker-php-ext-install opcache
 RUN docker-php-ext-install gd
+RUN docker-php-ext-install exif
+
+RUN docker-php-ext-enable exif
 
 RUN apt-get update 
 
-#RUN apt-get install -y apache2-bin 
-#RUN apt-get install -y apache2-data
-#RUN apt-get install -y apache2-utils
-#RUN apt-get install -y apache2
-# ...existing code...
+RUN a2enmod authz_core 
+RUN a2enmod authz_user 
+RUN a2enmod auth_basic
 
+#RUN mkdir -p /etc/apache2/sites-available
 
-RUN apt-get update 
-
-RUN mkdir -p /etc/apache2/sites-available
-RUN mkdir -p /etc/apache2/sites-enabled
+#RUN mkdir -p /etc/apache2/sites-enabled
 
 COPY ./virtual-hosts-apache/dmit.sytes.conf /etc/apache2/sites-available/dmit.sytes.conf
-COPY ./virtual-hosts-apache/dmit.sytes.conf /usr
+
+RUN a2ensite dmit.sytes.conf
+
+RUN a2enmod rewrite
+
+RUN a2enmod mpm_prefork
 
 # Crea el nuevo directorio para el virtual host  
 RUN mkdir -p /var/www/dmit.sytes.net
 
+COPY ./src/composer.json /var/www/dmit.sytes.net
+
+COPY ./src/composer.lock /var/www/dmit.sytes.net
+
 WORKDIR /var/www/dmit.sytes.net
-
-# Copia los archivos de tu aplicación al nuevo directorio  
-COPY ./src /var/www/dmit.sytes.net/
-
 
 # Instala Composer  
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
 
 # Configura el acceso SSH  
 RUN mkdir /var/run/sshd && \
@@ -113,26 +118,26 @@ RUN mkdir /var/run/sshd && \
 
 # Establecer contraseña de root  
 RUN echo 'root:Sanmartin1333' | chpasswd # Establecer contraseña para root
+
 RUN sed -i '/PermitRootLogin/c\PermitRootLogin yes' /etc/ssh/sshd_config
 
-# Habilita SSL y el módulo de reescritura  
-# RUN a2enmod ssl && a2enmod rewrite  
-# Configuración de Apache para SSL (usando un archivo ficticio inicial)  
-#COPY ./virtual-hosts-apache/ /etc/apache2/sites-available/
 
-RUN a2ensite dmit.sytes.conf
-#RUN a2ensite piamonddmit.sytes.net.conf
-RUN a2enmod rewrite
 
-# Habilitar el sitio
+# Copia los archivos de tu aplicación al nuevo directorio  
+COPY ./src /var/www/dmit.sytes.net/
+
+RUN composer install --no-interaction --optimize-autoloader --no-dev
+
 
 RUN chown -R www-data:www-data /var/www/dmit.sytes.net/public
+
 RUN chmod -R 755 /var/www/dmit.sytes.net/public
 # Establecer permisos
 RUN chown -R www-data:www-data /var/www/dmit.sytes.net/storage /var/www/dmit.sytes.net/bootstrap/cache
+
 RUN chmod -R 775 /var/www/dmit.sytes.net/storage /var/www/dmit.sytes.net/bootstrap/cache
 
-RUN composer install --no-interaction --optimize-autoloader --no-dev
+
 
 # Instalar dependencias de npm (Node.js)
 RUN npm install
@@ -142,4 +147,4 @@ RUN npm run dev
 
 # Comando para iniciar Apache
 #CMD service webmin start && apache2-foreground
-CMD service webmin start && apachectl -D FOREGROUND
+CMD ["apachectl", "-D", "FOREGROUND"]
